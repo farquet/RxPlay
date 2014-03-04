@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="iterateesDemo/app"/>
+	<classpathentry kind="src" path="iterateesDemo/target/scala-2.10/src_managed/main"/>
+	<classpathentry kind="src" path="iterateesDemo/test"/>
+	<classpathentry kind="con" path="org.scala-ide.sdt.launching.SCALA_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="output" path="iterateesDemo/target/scala-2.10/classes_managed"/>
+</classpath>
