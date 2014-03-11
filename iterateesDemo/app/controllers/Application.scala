@@ -29,16 +29,16 @@ object Application extends Controller {
     val skip: Enumeratee[Int, Int] = Enumeratee.drop(1)
     val resSkip = nums through skip
     
-    /* flatMap = map and flatten */
+    /* flatMap */
     val nestedNums = Enumerator(Enumerator(1, 2, 3), Enumerator(3, 4, 5))
     
-    //resDouble |>> iterPrint
-    
+    resDouble |>> iterPrint
+
     //resFilter |>> iterPrint
    
     //resTake |>> iterPrint
     
-    resSkip |>> iterPrint
+    //resSkip |>> iterPrint
     
     /* rendering */
     Ok(views.html.index("Your new application is ready !"))
