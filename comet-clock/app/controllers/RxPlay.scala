@@ -3,6 +3,8 @@ Conversion from Observables to Iteratees and from Iteratees to Observables.
 Solution from Byran Gilbert (http://bryangilbert.com)
 */
 
+package controllers
+
 import rx.lang.scala._
 import scala.concurrent._
 import scala.util._

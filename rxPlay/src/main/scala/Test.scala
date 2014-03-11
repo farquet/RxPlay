@@ -38,4 +38,5 @@ object Test extends App {
 
   val asyncIntObserverable = Observable.interval(50 millis)
   asyncIntObserverable through composed run Iteratee.foreach(println(_))
+  
 }
