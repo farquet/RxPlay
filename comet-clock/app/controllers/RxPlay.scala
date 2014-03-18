@@ -1,6 +1,6 @@
 /*
 Conversion from Observables to Iteratees and from Iteratees to Observables.
-Solution from Byran Gilbert (http://bryangilbert.com)
+Solution from Bryan Gilbert (http://bryangilbert.com)
 */
 
 package controllers
@@ -48,16 +48,16 @@ object RxPlay {
     Concurrent.unicast[T] { channel =>
       val subscription = obs.subscribe(new ChannelObserver(channel))
       val onComplete = { () => subscription.unsubscribe }
-      val onError = { (_: String, _: Input[T]) => subscription.unsubscribe } // DATA LOSS ?
+      val onError = { (_: String, _: Input[T]) => subscription.unsubscribe }
       (onComplete, onError)
     }
   }
 
   // the observer is a mechanism that encapsulates onNext, onCompleted and onError
   // this will be used by the observable as callback methods if the observer is given as subscription
-  class ChannelObserver[T](channel: Channel[T]) extends rx.Observer[T] {
-    def onNext(elem: T): Unit = channel.push(elem)
-    def onCompleted(): Unit = channel.end()
-    def onError(e: Throwable): Unit = channel.end(e)
+  class ChannelObserver[T](channel: Channel[T]) extends rx.lang.scala.Observer[T] {
+    override def onNext(elem: T): Unit = channel.push(elem)
+    override def onCompleted(): Unit = channel.end()
+    override def onError(e: Throwable): Unit = channel.end(e)
   }
 }
