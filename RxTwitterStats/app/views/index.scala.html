@@ -1,0 +1,17 @@
+@main {
+    
+    <h1>Last tweet for keyword</h1>
+    
+    <p id="twitt"></p>
+    
+    <script type="text/javascript" charset="utf-8">
+        // Called for each Comet message
+        var twitterUpdate = function(tweetValue) {
+        	var safeVal = tweetValue.substring(1, tweetValue.length-1).replace(/[\\"]/g, "\"")
+        	$('#twitt').html(safeVal, '<span>$1</span>')
+        }
+    </script>
+    
+    <iframe id="comet" src="@routes.Application.rxTwitterStats.unique"></iframe>
+    
+}
