@@ -5,7 +5,8 @@
     <p id="twitt"></p>
     
     <script type="text/javascript" charset="utf-8">
-        // Called for each Comet message
+        
+        // twitterUpdate function called everytime a tweet is produced with text in arg
         var twitterUpdate = function(tweetValue) {
         	var safeVal = tweetValue.substring(1, tweetValue.length-1).replace(/[\\"]/g, "\"")
         	$('#twitt').html(safeVal, '<span>$1</span>')

@@ -3,7 +3,7 @@
 # ~~~~
 
 # Home page
-GET     /                           controllers.Application.index(keyword: String ?="NBA")
+GET     /                           controllers.Application.index
 
 # The Comet stream
 GET     /comet                      controllers.Application.rxTwitterStats

@@ -35,7 +35,9 @@ object Application extends Controller {
   val ConsumerKey = "jv8ZWJsb8X7DJKKirEGOCknuI"
   val ConsumerSecret = "0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"
  
+  var obsCollection : Map[String, Observable[String]] = Map.empty
  
+  
   def twitterRequest(req: String): Observable[String] = {
    
   Observable({ obs: Observer[String] =>
@@ -67,7 +69,7 @@ object Application extends Controller {
      } catch {
        case e : Throwable => {
          obs.onError(e) // passing the error to the Observable
-         System.err.println("Error: " + e)
+         System.err.println("Error : " + e)
        }
      }
      
@@ -79,12 +81,19 @@ object Application extends Controller {
     // Twitter streaming API : https://dev.twitter.com/docs/streaming-apis/parameters
     val keyword = "NBA"
     val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+keyword+"&filter_level=none&stall_warnings=true"
-    val obs = twitterRequest(req).map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
     
-    Ok.chunked(CometObs(obs, callback = "parent.twitterUpdate"))
+    val obs = twitterRequest(req)
+    val textObs = obs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
+    
+    Ok.chunked(CometObs(textObs, callback = "parent.twitterUpdate"))
   }
   
-  def index(keyword: String) = Action {
+  def changeKeyword(keyword: String) = Action {
+    // TODO
+    Ok(views.html.index())
+  }
+  
+  def index = Action {
     Ok(views.html.index())
   }
 }
