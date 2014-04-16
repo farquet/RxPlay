@@ -1,6 +1,7 @@
 package controllers
 
 import play.api.templates.Html
+import scala.collection.mutable.Map
 import rx.lang.scala.Observable
 import rx.lang.scala._
 
@@ -24,22 +25,19 @@ object CometObs {
     if (initialChunk != null) {
       val obsInit: Observable[Html] = Observable.from(List(initialChunk))
       obsInit ++ obsNext
-    }
-    else
+    } else {
       obsNext
+    }
   }
-  
-    def apply[E](obsMap: Map[String, Observable[E]], initialChunk: Html = Html(Array.fill[Char](5 * 1024)(' ').mkString + "<html><body>")): Observable[Html] = {
+
+  def apply[E](obsMap: Map[String, Observable[E]], initialChunk: Html = Html(Array.fill[Char](5 * 1024)(' ').mkString + "<html><body>")): Observable[Html] = {
     
     val obsInit: Observable[Html] = Observable.from(List(initialChunk))
     
-    val allObsList = obsMap.values.toList
-    val callbackList = obsMap.keys.toList
-    
-    val htmlObsList = allObsList.zip(callbackList).map(el => convertToJsFunction(el._1, el._2))
-    
-    obsInit ++ htmlObsList.head // TODO mergeDelayError all list
-    //obsInit ++ Observable.mergeDelayError(htmlObsList)
+    val htmlObsList = obsMap.map(el => convertToJsFunction(el._2, el._1))
+
+    // merging all observables from the list of callback functions with corresponding values to a single observable of everything
+    obsInit ++ htmlObsList.reduceLeft((a, b) => a.mergeDelayError(b))
   }
   
   private def convertToJsFunction[E](obs: Observable[E], callback: String): Observable[Html] = {

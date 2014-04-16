@@ -5,8 +5,15 @@
 # Home page
 GET     /                           controllers.Application.index
 
+# Home page
+GET     /socket                     controllers.Application.socket
+
+GET     /cometIndex                 controllers.Application.cometIndex
+
 # The Comet stream
 GET     /comet                      controllers.Application.rxTwitterStats
+
+GET     /changeKeyword/:keyword     controllers.Application.changeKeyword(keyword: String)
 
 # Map static resources from the /public folder to the /assets URL path
 GET     /assets/*file               controllers.Assets.at(path="/public", file)

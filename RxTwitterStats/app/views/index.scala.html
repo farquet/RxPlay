@@ -2,17 +2,95 @@
     
     <h1>Last tweet for keyword</h1>
     
-    <p id="twitt"></p>
+    <p id="tweetText"></p>
+    
+    <div><br />
+	<input type="text" name="keywordField" id="keywordField">
+	<input type="submit" value="Submit" onclick="updateKeyword()">
+	</div>
     
     <script type="text/javascript" charset="utf-8">
-        
-        // twitterUpdate function called everytime a tweet is produced with text in arg
-        var twitterUpdate = function(tweetValue) {
-        	var safeVal = tweetValue.substring(1, tweetValue.length-1).replace(/[\\"]/g, "\"")
-        	$('#twitt').html(safeVal, '<span>$1</span>')
-        }
-    </script>
     
-    <iframe id="comet" src="@routes.Application.rxTwitterStats.unique"></iframe>
+    var socket;
+    var callbacks = {};
+    
+    var test = function(data) {
+    	alert('data = '+data);
+    }
+    
+    var twitterUpdate = function(tweetText) {
+    	var safeVal = tweetText.substring(1, tweetText.length-1).replace(/[\\"]/g, "\"")
+    	$('#tweetText').html(safeVal, '<span>$1</span>')
+    }
+    
+    callbacks.test = test;
+    callbacks.twitterUpdate = twitterUpdate;
+    
+	function createWebSocket(host, callbacks) {
+		if (window.console) {
+			console.log("Connecting to "+host+" ...");
+			console.log(callbacks.length+" callbacks function set");
+		}
+		
+		if (window.MozWebSocket) { // for Firefox
+			window.WebSocket=window.MozWebSocket;
+		}
+		
+		if (!window.WebSocket) {
+			if (window.console) {
+				console.log("This browser doesn't support websockets.")
+			}
+			alert('Votre navigateur ne supporte pas les WebSocket.');
+			return false;
+		} else {
+			socket = new WebSocket(host);
+			
+			socket.onopen = function() { if (window.console) console.log("Socket opened."); }
+			socket.onclose = function() { if (window.console) console.log("Socket closed."); }
+			socket.onerror = function() { if (window.console) console.log("Socket error."); }
+			
+			// msg has form <function_name:argument> or <function_name>
+			socket.onmessage = function(msgEvent) {
+				var msg = msgEvent.data;
+				
+				console.log("msg = "+msg);
+				index = msg.indexOf(":");
+				if (index < 0) { // function has no argument
+					callbacks[msg]();
+				} else {
+					func = msg.split(":")[0];
+					arg = msg.substring(index+1);
+					
+					callbacks[func](arg);
+				}
+			}
+		}
+		return socket;
+	}
+	
+	var pathArray = window.location.pathname.split( '/' );
+	pathArray[pathArray.length-1] = "socket";
+	var path = pathArray.join("/");
+	socket=createWebSocket("ws://"+window.location.host+path, callbacks);
+	
+	console.log(socket);
+	
+	function sendMessage(msg) {
+		if(typeof msg=='object') {
+			msg = JSON.stringify(msg); // converting any data to string
+		}
+		
+		if(socket) {
+			if (window.console) console.log("Sending to server -> "+msg);
+			socket.send(msg);
+		} else {
+			console.error("Socket undefined while trying to send.");
+		}
+	}
+	
+	var updateKeyword = function () {
+		sendMessage(document.getElementById("keywordField").value);
+	}
+    </script>
     
 }
