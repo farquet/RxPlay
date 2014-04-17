@@ -1,12 +1,15 @@
 @main {
+    <div id="content">
+    <h1>RxTwitterStats</h1>
     
-    <h1>Last tweet for keyword</h1>
-    
-    <p id="tweetText"></p>
-    
+    <div id="liveTweetBox"><p id="liveTitle">Live tweets</p>
+    <p id="liveTweet">Waiting for tweet...</p>
+    </div><br style="clear:both" /><br />
+    <p>Number of live tweets : <span id="counter">0</span></p>
+    <hr />
     <div><br />
 	<input type="text" name="keywordField" id="keywordField">
-	<input type="submit" value="Submit" onclick="updateKeyword()">
+	<input type="submit" value="Change Keyword" onclick="updateKeyword()">
 	</div>
     
     <script type="text/javascript" charset="utf-8">
@@ -14,16 +17,16 @@
     var socket;
     var callbacks = {};
     
-    var test = function(data) {
-    	alert('data = '+data);
+    var counterUpdate = function(ctr) {
+    	$('#counter').html(ctr, '$1');
     }
     
-    var twitterUpdate = function(tweetText) {
-    	var safeVal = tweetText.substring(1, tweetText.length-1).replace(/[\\"]/g, "\"")
-    	$('#tweetText').html(safeVal, '<span>$1</span>')
+    var twitterUpdate = function(liveTweet) {
+    	var safeVal = liveTweet.substring(1, liveTweet.length-1).replace(/[\\"]/g, "\"");
+    	$('#liveTweet').html(safeVal, '<span>$1</span>');
     }
     
-    callbacks.test = test;
+    callbacks.counterUpdate = counterUpdate;
     callbacks.twitterUpdate = twitterUpdate;
     
 	function createWebSocket(host, callbacks) {
@@ -92,5 +95,5 @@
 		sendMessage(document.getElementById("keywordField").value);
 	}
     </script>
-    
+    </div>
 }

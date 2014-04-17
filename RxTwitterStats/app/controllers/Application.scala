@@ -20,6 +20,7 @@ import scala.concurrent.Future
 import scala.util.{Success, Failure}
 import scala.collection.mutable.Map
 import rx.lang.scala._
+import rx.lang.scala.subjects._
 
 import RxPlay._
 
@@ -100,14 +101,25 @@ object Application extends Controller {
     observableFromStream(is)
   }
   
+  private def splitFuncArg(msg: String): (String, String) = { // cut string at first : occurence
+    val index = msg.indexOf(":")
+    val func = msg.split(":").head
+    
+    if (index < 0) { // client sent <func> to the server with no arg
+      (func, "")
+    } else {
+      (func, msg.substring(index+1))
+    }
+  }
+  
   /**
    * React to data sent from the client (pretty much like an Actor)
    */
   def clientHasSent(msg: String) = {
-    val index = msg.indexOf(":");
-    val func = msg.split(":").head;
+    val (func, arg) = splitFuncArg(msg)
     
-    if (index < 0) { // client sent <func> to the server. We react to it
+    if (arg == null || arg.length <= 0) { // client sent <func> to the server. We react to it
+      println("received <"+func+">")
       func match {
         case "close" => // client force the server to close connection
           println("User want to stop receiving data.")
@@ -116,12 +128,11 @@ object Application extends Controller {
           println("Client sent "+o+" (unknown function)")
       }
     } else {
-      val arg = msg.substring(index+1)
       println("received <"+func+"> with arg <"+arg+">")
       func match {
         case "keywordChanged" => { // client wants
-          val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(arg, "UTF-8")+"&filter_level=none&stall_warnings=true"
-          val (status, is) = twitterRequest(req)
+          //val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(arg, "UTF-8")+"&filter_level=none&stall_warnings=true"
+          //val (status, is) = twitterRequest(req)
           // TODO use this new input stream 'is' in replacement of the old one
         }
       }
@@ -133,19 +144,45 @@ object Application extends Controller {
    * 'in' is the consumer of data received from the client
    * 'textObs' is the data sent to the client
    */
-  def socket = WebSocket.using[String] { request => 
+  def socket = WebSocket.using[String] { request =>
+    
+  val dataSource = ReplaySubject[Observable[String]]()
+  
   val keyword = "NBA"
+  // all tweets in json format
   val jsonObs = twitterFeedKeyword(keyword)
-  val textObs = jsonObs.map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
-
-  val (out,channel) = Concurrent.broadcast[String]
+  // extracting only the text content of the tweet
+  val textObs = jsonObs.map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0).map(el => {println("twitter consumed"); el})
+  // counting tweets
+  val counterObs = jsonObs.scan(0)((ctr, _) => ctr+1).map(ctr => {println("real counter consumed"); "counterUpdate:"+ctr})
+  //val counterObs = Observable.interval(1 second).map(ctr => {println("timer consumed"); "counterUpdate:"+ctr})
+  
+  dataSource.onNext(textObs)
+  
+  //obsOfObs = obsOfObs ++ Observable.from(List(counterObs))
   
   val in = Iteratee.foreach[String](dataReceived => {
-    println(dataReceived)
-    clientHasSent(dataReceived)
+    if (dataReceived == Enumerator.eof) {
+      println("Client has closed the stream")
+    } else {
+      println(dataReceived)
+      
+      val (func, arg) = splitFuncArg(dataReceived)
+      if (func == "keywordChanged" && arg.length >= 2) {
+        // changing twitter feed
+        println("Changing keyword to : "+arg)
+        dataSource.onNext(Observable.from(List("twitterUpdate:\"changing stream !\"")))
+        
+        val newKeywordObs = twitterFeedKeyword(arg).map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
+        dataSource.onNext(newKeywordObs)
+      }
+    }
   })
   
-  (in, textObs)
+  //var obsOfObs:Observable[Observable[String]] = Observable.from(List(counterObs, textObs))
+  val res = (dataSource.switch).merge(counterObs)
+  
+  (in, res)
 }
   
   def index = Action {
