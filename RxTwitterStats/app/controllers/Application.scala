@@ -40,6 +40,8 @@ object Application extends Controller {
   val ConsumerKey = "jv8ZWJsb8X7DJKKirEGOCknuI"
   val ConsumerSecret = "0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"
  
+  var switch = false
+  
   /**
    * For a specific Twitter url of the streaming API,
    * will return the status code sent by Twitter and the corresponding input stream
@@ -61,30 +63,62 @@ object Application extends Controller {
   }
   
   /**
-   * Given an inputStream, it will convert the data received in an Observable of String
+   * Given an inputStream, it will convert the data received in a Subject of String
    * One string returned contains one line of the stream read
    */
   def observableFromStream(is: InputStream): Observable[String] = {
-    Observable({ obs: Observer[String] =>
     
     val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
     
+    Observable { obs: Observer[String] =>
+	  
 	 try {
-	  Iterator continually bufferedReader.readLine takeWhile(data => data != null) foreach(tweet => {
+	   def getTweet:Unit = {
+	     val f = Future[String] {
+	       val tweet = bufferedReader.readLine
+	       println(tweet.take(180)+" ...")
+	       tweet
+	     }
+	     f onComplete {
+	       case Success(s) => {
+	         obs.onNext(s) // adding the received value to the Observable
+	    	 getTweet // fetching the next value
+	       }
+	       case Failure(e) => {
+	         println("Error with Twitter stream :"+e.getMessage())
+	         obs.onNext("twitterUpdate:\"Network error : "+e+"\"") // propagating error
+	       }
+	     }
+	   }
+	   getTweet
+	   
+	  /*
+	    Iterator continually bufferedReader.readLine takeWhile(data => data != null) foreach(tweet => {
 	    println(tweet.take(200)+" ...")
 	    if (tweet.length > 0)
 	     obs.onNext(tweet)
 	    })
+	    
+	   bufferedReader.close()
 	   obs.onCompleted
 	   println("Observable completed")
+	   */
 	 } catch {
        case e : Throwable => {
          obs.onError(e) // passing the error to the Observable
-         System.err.println("Error : " + e)
+         System.err.println("Error : " + e.getMessage())
        }
      }
-	   
-    })
+	 
+	 // Closing connection
+	 new Subscription { override def unsubscribe() = {
+	   obs.onCompleted
+	   bufferedReader.close() // TODO maybe a nicer way to close without throwing
+	 }
+	 }
+    } finallyDo { 
+      bufferedReader.close
+    }
   }
   
   /**
@@ -145,42 +179,73 @@ object Application extends Controller {
    * 'textObs' is the data sent to the client
    */
   def socket = WebSocket.using[String] { request =>
-    
-  val dataSource = ReplaySubject[Observable[String]]()
   
+  val submit = Subject[Subject[String]]()
+  val messages = Subject[String]()
+  
+  /*
   val keyword = "NBA"
   // all tweets in json format
-  val jsonObs = twitterFeedKeyword(keyword)
+  val twitter = twitterFeedKeyword(keyword)
+  
+  //source.onNext(twitter)
+  
   // extracting only the text content of the tweet
-  val textObs = jsonObs.map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0).map(el => {println("twitter consumed"); el})
+  val text = Observable{ obs: Observer[String] =>
+  	a = twitter.subscribe(elem => {
+  	  val value = "twitterUpdate:"+(Json.parse(elem.mkString) \ "text").toString
+  	  obs.onNext(value)
+  	  submit.onNext(value)
+  	})
+  }
+  */
+  //val textObs = jsonObs.map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0).map(el => {println("twitter consumed"); el})
+  
   // counting tweets
-  val counterObs = jsonObs.scan(0)((ctr, _) => ctr+1).map(ctr => {println("real counter consumed"); "counterUpdate:"+ctr})
+  /*val counter = Observable{ obs: Observer[String] =>
+    b = twitter.subscribe(elem => obs.onNext("counterUpdate:42")) // TODO
+  }
+  */
+  //val counterObs = twitter.scan(0)((ctr, _) => ctr+1).map(ctr => {println("real counter consumed"); "counterUpdate:"+ctr})
   //val counterObs = Observable.interval(1 second).map(ctr => {println("timer consumed"); "counterUpdate:"+ctr})
   
-  dataSource.onNext(textObs)
-  
-  //obsOfObs = obsOfObs ++ Observable.from(List(counterObs))
+  //submitObs.onNext(textObs)
   
   val in = Iteratee.foreach[String](dataReceived => {
+    var a : Subscription = null
+    
     if (dataReceived == Enumerator.eof) {
       println("Client has closed the stream")
     } else {
       println(dataReceived)
-      
-      val (func, arg) = splitFuncArg(dataReceived)
-      if (func == "keywordChanged" && arg.length >= 2) {
-        // changing twitter feed
-        println("Changing keyword to : "+arg)
-        dataSource.onNext(Observable.from(List("twitterUpdate:\"changing stream !\"")))
         
-        val newKeywordObs = twitterFeedKeyword(arg).map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
-        dataSource.onNext(newKeywordObs)
+      val (func, arg) = splitFuncArg(dataReceived)
+      
+      func match {
+        case "ping" =>
+          println("Handling ping")
+          messages.onNext("twitterUpdate:\"pong !\"")
+          
+        case "stop" =>
+          println("Handling stop")
+          //a.unsubscribe
+          
+        case "keywordChanged" if (arg.length >= 2) =>
+          println("Handling keyword change")
+          messages.onNext("twitterUpdate:\"Changing keyword to "+arg+"\"")
+          
+          val feed = Subject[String]() // creating a new Subject to fill with tweets
+          twitterFeedKeyword(arg).subscribe(el => feed.onNext("twitterUpdate:"+(Json.parse(el) \ "text").toString))
+          submit.onNext(feed) // adding the feed to the switched Subject
       }
+      
     }
   })
   
-  //var obsOfObs:Observable[Observable[String]] = Observable.from(List(counterObs, textObs))
-  val res = (dataSource.switch).merge(counterObs)
+  // submit.switch allow changing data feed
+  val tweetFeed = submit.switch
+  
+  val res = tweetFeed.merge(messages)
   
   (in, res)
 }
