@@ -66,7 +66,46 @@ object Application extends Controller {
    * Given an inputStream, it will convert the data received in a Subject of String
    * One string returned contains one line of the stream read
    */
-  def observableFromStream(is: InputStream): Observable[String] = {
+    def observableFromStream(is: InputStream): Observable[String] = {
+    
+    val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
+    
+    Observable { obs: Observer[String] =>
+	  
+	 try {
+	   val simpleIterator: Observable[Int] = Observable { subscriber =>
+    var i = 0
+    while(!subscriber.isUnsubscribed) {
+      subscriber.onNext{ println("whappen deh: "+ i); i }
+      i += 1
+    }
+
+    if(subscriber.isUnsubscribed){ subscriber.onCompleted() }
+  }
+	 } catch {
+       case e : Throwable => {
+         obs.onError(e) // passing the error to the Observable
+         System.err.println("Error : " + e.getMessage())
+       }
+     }
+	 
+	 // Closing connection
+	 new Subscription { override def unsubscribe() = {
+	   println("Someone unsubscribed")
+	   obs.onCompleted
+	   bufferedReader.close() // TODO maybe a nicer way to close without throwing
+	 }
+	 }
+    } finallyDo {
+      println("CLOSING STREAM")
+      bufferedReader.close
+    }
+  }
+   
+  /**
+   * old version using a future that will call himself
+   */
+  def observableFromStream2(is: InputStream): Observable[String] = {
     
     val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
     
@@ -92,17 +131,6 @@ object Application extends Controller {
 	   }
 	   getTweet
 	   
-	  /*
-	    Iterator continually bufferedReader.readLine takeWhile(data => data != null) foreach(tweet => {
-	    println(tweet.take(200)+" ...")
-	    if (tweet.length > 0)
-	     obs.onNext(tweet)
-	    })
-	    
-	   bufferedReader.close()
-	   obs.onCompleted
-	   println("Observable completed")
-	   */
 	 } catch {
        case e : Throwable => {
          obs.onError(e) // passing the error to the Observable
@@ -112,11 +140,13 @@ object Application extends Controller {
 	 
 	 // Closing connection
 	 new Subscription { override def unsubscribe() = {
+	   println("Someone unsubscribed")
 	   obs.onCompleted
 	   bufferedReader.close() // TODO maybe a nicer way to close without throwing
 	 }
 	 }
-    } finallyDo { 
+    } finallyDo {
+      println("CLOSING STREAM")
       bufferedReader.close
     }
   }
@@ -183,36 +213,7 @@ object Application extends Controller {
   val submit = Subject[Subject[String]]()
   val messages = Subject[String]()
   
-  /*
-  val keyword = "NBA"
-  // all tweets in json format
-  val twitter = twitterFeedKeyword(keyword)
-  
-  //source.onNext(twitter)
-  
-  // extracting only the text content of the tweet
-  val text = Observable{ obs: Observer[String] =>
-  	a = twitter.subscribe(elem => {
-  	  val value = "twitterUpdate:"+(Json.parse(elem.mkString) \ "text").toString
-  	  obs.onNext(value)
-  	  submit.onNext(value)
-  	})
-  }
-  */
-  //val textObs = jsonObs.map(data => "twitterUpdate:"+(Json.parse(data.mkString) \ "text").toString).filter(_.length > 0).map(el => {println("twitter consumed"); el})
-  
-  // counting tweets
-  /*val counter = Observable{ obs: Observer[String] =>
-    b = twitter.subscribe(elem => obs.onNext("counterUpdate:42")) // TODO
-  }
-  */
-  //val counterObs = twitter.scan(0)((ctr, _) => ctr+1).map(ctr => {println("real counter consumed"); "counterUpdate:"+ctr})
-  //val counterObs = Observable.interval(1 second).map(ctr => {println("timer consumed"); "counterUpdate:"+ctr})
-  
-  //submitObs.onNext(textObs)
-  
   val in = Iteratee.foreach[String](dataReceived => {
-    var a : Subscription = null
     
     if (dataReceived == Enumerator.eof) {
       println("Client has closed the stream")
