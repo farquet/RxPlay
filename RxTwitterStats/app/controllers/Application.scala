@@ -40,8 +40,6 @@ object Application extends Controller {
   val ConsumerKey = "jv8ZWJsb8X7DJKKirEGOCknuI"
   val ConsumerSecret = "0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"
  
-  var switch = false
-  
   /**
    * For a specific Twitter url of the streaming API,
    * will return the status code sent by Twitter and the corresponding input stream
@@ -55,61 +53,29 @@ object Application extends Controller {
      consumer.sign(request) // signing the current request with the authentication set above
      
      val client = new DefaultHttpClient()
+	 println("Opening new Twitter stream")
      val response = client.execute(request)
      val status = response.getStatusLine().getStatusCode()
      val inputStream = response.getEntity().getContent()
      
      (status, inputStream)
   }
-  
-  /**
-   * Given an inputStream, it will convert the data received in a Subject of String
-   * One string returned contains one line of the stream read
-   */
-    def observableFromStream(is: InputStream): Observable[String] = {
-    
-    val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
-    
-    Observable { obs: Observer[String] =>
-	  
-	 try {
-	   val simpleIterator: Observable[Int] = Observable { subscriber =>
-    var i = 0
-    while(!subscriber.isUnsubscribed) {
-      subscriber.onNext{ println("whappen deh: "+ i); i }
-      i += 1
-    }
-
-    if(subscriber.isUnsubscribed){ subscriber.onCompleted() }
-  }
-	 } catch {
-       case e : Throwable => {
-         obs.onError(e) // passing the error to the Observable
-         System.err.println("Error : " + e.getMessage())
-       }
-     }
-	 
-	 // Closing connection
-	 new Subscription { override def unsubscribe() = {
-	   println("Someone unsubscribed")
-	   obs.onCompleted
-	   bufferedReader.close() // TODO maybe a nicer way to close without throwing
-	 }
-	 }
-    } finallyDo {
-      println("CLOSING STREAM")
-      bufferedReader.close
-    }
-  }
    
   /**
    * old version using a future that will call himself
    */
-  def observableFromStream2(is: InputStream): Observable[String] = {
+  def observableFromStream(is: InputStream): Observable[String] = {
     
     val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
     
-    Observable { obs: Observer[String] =>
+    def closeReader: Unit = {
+      println("App is closing Twitter stream.")
+      
+      if (bufferedReader.ready)
+    	  bufferedReader.close
+    }
+    
+    Observable { sub: Subscriber[String] =>
 	  
 	 try {
 	   def getTweet:Unit = {
@@ -120,12 +86,19 @@ object Application extends Controller {
 	     }
 	     f onComplete {
 	       case Success(s) => {
-	         obs.onNext(s) // adding the received value to the Observable
-	    	 getTweet // fetching the next value
+	         if(!sub.isUnsubscribed) {
+	           if (s.length > 0)
+	        	   sub.onNext(s) // adding the received value to the Observable
+	           getTweet // fetching the next value
+	         } else {
+	           println("Unsubscribed from Twitter stream.")
+	           closeReader
+	         }
 	       }
 	       case Failure(e) => {
-	         println("Error with Twitter stream :"+e.getMessage())
-	         obs.onNext("twitterUpdate:\"Network error : "+e+"\"") // propagating error
+	         println("Error with Twitter stream : "+e.getMessage())
+	         sub.onError(e) // propagating the error
+	         closeReader
 	       }
 	     }
 	   }
@@ -133,21 +106,11 @@ object Application extends Controller {
 	   
 	 } catch {
        case e : Throwable => {
-         obs.onError(e) // passing the error to the Observable
+         sub.onError(e) // passing the error to the Observable
          System.err.println("Error : " + e.getMessage())
        }
      }
-	 
-	 // Closing connection
-	 new Subscription { override def unsubscribe() = {
-	   println("Someone unsubscribed")
-	   obs.onCompleted
-	   bufferedReader.close() // TODO maybe a nicer way to close without throwing
-	 }
-	 }
-    } finallyDo {
-      println("CLOSING STREAM")
-      bufferedReader.close
+	 // TODO we could also return a Subscription. Is it usefull here ?
     }
   }
   
@@ -162,7 +125,12 @@ object Application extends Controller {
     val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+keyword+"&filter_level=none&stall_warnings=true"
     val (status, is) = twitterRequest(req)
     
-    observableFromStream(is)
+    if (status != 200) {
+      println("Bad status from Twitter : "+status)
+      Observable.from(List("streamChange"))
+    } else {
+      observableFromStream(is)
+    }
   }
   
   private def splitFuncArg(msg: String): (String, String) = { // cut string at first : occurence
@@ -175,34 +143,20 @@ object Application extends Controller {
       (func, msg.substring(index+1))
     }
   }
+
+// unused for the moment but this could be a good way to handle data
+class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer[Int] {
+  override def onNext(elem: Int): Unit = { println("Subscriber received : "+elem) }
+  override def onCompleted(): Unit = { () => println("completed !") }
+  override def onError(e: Throwable): Unit = { println("error :"+e.getMessage) }
+}
   
   /**
-   * React to data sent from the client (pretty much like an Actor)
+   * This returns an Observable that we will put inbetween real Twitter feed, to force closing connection the sooner,
+   * This avoids to wait until next tweet to close the connection
    */
-  def clientHasSent(msg: String) = {
-    val (func, arg) = splitFuncArg(msg)
-    
-    if (arg == null || arg.length <= 0) { // client sent <func> to the server. We react to it
-      println("received <"+func+">")
-      func match {
-        case "close" => // client force the server to close connection
-          println("User want to stop receiving data.")
-          // TODO stop getting data from Twitter
-        case o => // 
-          println("Client sent "+o+" (unknown function)")
-      }
-    } else {
-      println("received <"+func+"> with arg <"+arg+">")
-      func match {
-        case "keywordChanged" => { // client wants
-          //val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(arg, "UTF-8")+"&filter_level=none&stall_warnings=true"
-          //val (status, is) = twitterRequest(req)
-          // TODO use this new input stream 'is' in replacement of the old one
-        }
-      }
-    }
-  }
-  
+  def bridgeFeedObs = Observable.from(List("streamChange"))
+
   /**
    * Creates a WebSocket
    * 'in' is the consumer of data received from the client
@@ -210,45 +164,62 @@ object Application extends Controller {
    */
   def socket = WebSocket.using[String] { request =>
   
-  val submit = Subject[Subject[String]]()
+  val submit = Subject[Observable[String]]()
   val messages = Subject[String]()
   
   val in = Iteratee.foreach[String](dataReceived => {
     
-    if (dataReceived == Enumerator.eof) {
+    if (dataReceived == Enumerator.eof) { // TODO doesn't work
       println("Client has closed the stream")
+      messages.onCompleted
     } else {
       println(dataReceived)
-        
+      
       val (func, arg) = splitFuncArg(dataReceived)
       
       func match {
         case "ping" =>
           println("Handling ping")
           messages.onNext("twitterUpdate:\"pong !\"")
-          
+        
         case "stop" =>
           println("Handling stop")
-          //a.unsubscribe
-          
+          val empty = Subject[String]
+          empty.onNext("twitterUpdate:\"Stop !\"")
+          empty.onCompleted
+          submit.onNext(empty)
+        
         case "keywordChanged" if (arg.length >= 2) =>
           println("Handling keyword change")
-          messages.onNext("twitterUpdate:\"Changing keyword to "+arg+"\"")
+          submit.onNext(bridgeFeedObs) // adding a "streamChange" keyword to force switching stream
+          // TODO wait a little bit or is it bad ?
+          submit.onNext(twitterFeedKeyword(arg)) // adding the feed to the Subject of Observable
           
-          val feed = Subject[String]() // creating a new Subject to fill with tweets
-          twitterFeedKeyword(arg).subscribe(el => feed.onNext("twitterUpdate:"+(Json.parse(el) \ "text").toString))
-          submit.onNext(feed) // adding the feed to the switched Subject
       }
-      
     }
   })
   
   // submit.switch allow changing data feed
-  val tweetFeed = submit.switch
+  val tweetFeed: Subscription = (submit.switch).subscribe(
+  	  // onNext
+  	  { el:String => 
+  	    if (!el.equals("streamChange")) {
+  	    val text = (Json.parse(el) \ "text").toString
+  	    messages.onNext("twitterUpdate:\""+text+"\"")
+  	    }},
+  	  
+  	  // onError
+      {e:Throwable => println("Error on datasource : "+e.getMessage) },
+      
+      // onComplete
+      {() =>
+        messages.onCompleted
+        println("Completed") })
   
-  val res = tweetFeed.merge(messages)
   
-  (in, res)
+  // TODO unsubscription of tweetFeed ??
+  
+  (in, messages)
 }
   
   def index = Action {

@@ -1,32 +1,71 @@
 import rx.lang.scala._
 import rx.lang.scala.schedulers._
 
+import scala.concurrent._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.language.implicitConversions
+import ExecutionContext.Implicits.global
 
+import scala.util.{Success, Failure}
+import java.io.BufferedReader
 
 object SampleTest extends App {
   
-  // observable handling manually the subscriber
-  def obs1 : Observable[Int] = Observable { sub:Subscriber[Int] =>
-    var i = 0
-    while(!sub.isUnsubscribed) {
-      Thread.sleep(1000)
-      sub.onNext{ i }
-      i += 1
-    }
-
-    if(sub.isUnsubscribed){ println("Unsubscribed !"); sub.onCompleted() }
+  var obsNum = 0
+  def obs: Observable[Int] = Observable { sub:Subscriber[Int] =>
     
-  } finallyDo { () => println("Finally 2") }
+    val id = obsNum
+    obsNum = obsNum + 1
+    
+    try {
+       var i = 0
+	   def iter:Unit = {
+	     val f = Future[Int] {
+	       Thread.sleep(500)
+	       println("Observable "+id+" produces : "+i)
+	       i = i+1
+	       i
+	     }
+	     f onComplete {
+	       case Success(s) => {
+	         sub.onNext(s) // adding the received value to the Observable
+	    	 if (!sub.isUnsubscribed) {
+	    		 iter // fetching the next value
+	    	 } else {
+	    	   println("Someone unsubscribed from Observable "+id+" !")
+	    	 }
+	       }
+	       case Failure(e) => {
+	         println("Error on Observable "+id+" :"+e.getMessage())
+	       }
+	     }
+	   }
+	   iter
+    } catch {
+       case e : Throwable => {
+         sub.onError(e) // passing the error to the Observable
+         System.err.println("Error on Observable "+id+" : " + e.getMessage())
+       }
+     }
+    if(sub.isUnsubscribed){ println("Unsubscribed !"); sub.onCompleted() }
+  }
   
-  // observable using api
-  def obs2: Observable[Int] = Observable.interval(1 second).map(_.toInt).finallyDo { () => println("Finally 2") } 
   
   // emitting new infinite observable every 5 seconds
-  def obsception: Observable[Observable[Int]] = Observable.interval(5 seconds).map(el => obs2)
- 
-  (obsception.switch).subscribe(el => println(el))
-  Thread.sleep(10000)
+  def obsception: Observable[Observable[Int]] = Observable.interval(5 seconds).map(el => obs)
+  
+  // subscribing with a observer that encapsulates onNext, onError and onCompleted
+  val subscription = (obsception.switch).apply(new StreamObserver())
+  
+  Thread.sleep(20000) // because BlockingObservable doesn't have the same methods as Observable
+  subscription.unsubscribe
+  Thread.sleep(5000)
+}
+
+// embedding onNext, onComplete and onError in an Observer
+class StreamObserver[Int] extends rx.lang.scala.Observer[Int] {
+  override def onNext(elem: Int): Unit = { println("Subscriber received : "+elem) }
+  override def onCompleted(): Unit = { () => println("completed !") }
+  override def onError(e: Throwable): Unit = { println("error :"+e.getMessage) }
 }
