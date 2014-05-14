@@ -2,18 +2,49 @@
     <div id="content">
     <h1>RxTwitterStats</h1>
     
+    <input type="submit" id="stopButton" value="Stop" onclick="stopApp()">
+    <br />
     <div id="liveTweetBox"><p id="liveTitle">Live tweets</p>
     <p id="liveTweet">Waiting for tweet...</p>
     </div><br style="clear:both" /><br />
     <p>Number of live tweets : <span id="counter">0</span></p>
-    <hr />
     <div><br />
-	<input type="text" name="keywordField" id="keywordField">
+	<input type="text" name="keywordField" id="keywordField" onKeyDown="Javascript: if (event.keyCode==13) updateKeyword();">
 	<input type="submit" value="Change Keyword" onclick="updateKeyword()">
+	<br />
+	<div id="liveSpeed">
+	<canvas width="300px" height="100px" id="gaugeBox" style="width:150px;height:50px;"></canvas>
+	<br />
+	<div><span id="speed">0</span> tweets/sec</div>
 	</div>
-    
+	</div>
+	
     <script type="text/javascript" charset="utf-8">
-    
+    var opts = {
+	  lines: 12, // The number of lines to draw
+	  angle: 0.22, // The length of each line
+	  lineWidth: 0.3, // The line thickness
+	  pointer: {
+	    length: 0.7, // The radius of the inner circle
+	    strokeWidth: 0.02, // The rotation offset
+	    color: '#000000' // Fill color
+	  },
+	  limitMax: 'true',   // If true, the pointer will not go past the end of the gauge
+	  colorStart: '#6FADCF',
+	  colorStop: '#8FC0DA',
+	  strokeColor: '#E0E0E0',
+	  percentColors: [[0.0, "#a9d70b" ], [0.50, "#f9c802"], [1.0, "#ff0000"]],
+	  generateGradient: true
+	};
+    var target = document.getElementById('gaugeBox'); // your canvas element
+	var gauge = new Gauge(target).setOptions(opts);
+	
+	gauge.maxValue = 200; // set max gauge value
+	gauge.animationSpeed = 70; // set animation speed (32 is default value)
+	gauge.set(1); gauge.set(0); // set initial value
+    </script>
+	
+    <script type="text/javascript" charset="utf-8">
     var socket;
     var callbacks = {};
     
@@ -22,12 +53,36 @@
     }
     
     var twitterUpdate = function(liveTweet) {
-    	var safeVal = liveTweet.substring(1, liveTweet.length-1).replace(/[\\"]/g, "\"");
+    	var safeVal = liveTweet.replace(/[\\"]/g, "\"");
     	$('#liveTweet').html(safeVal, '<span>$1</span>');
     }
     
+    var lastSpeedUpdate = -1; // store last time the gauge was updated
+    
+    var speedUpdate = function(speed) {
+    	console.log("speed : <"+speed+">");
+    	var gaugeVal = speed;
+    	if (gaugeVal <= 0) gaugeVal = 0;
+    	if (gaugeVal >= gauge.maxValue) gaugeVal = gauge.maxValue;
+    	gauge.set(1*gaugeVal);
+    	
+    	$('#speed').html(speed, '$1');
+    	
+    	lastSpeedUpdate = new Date().getTime();
+    }
+ 	// reset the gauge if there has been no update after 1.2sec
+    function autoResetSpeed() {
+    	var now = new Date().getTime();
+    	if (lastSpeedUpdate != -1 && now - lastSpeedUpdate > 1200) {
+    		gauge.set(0);
+    		$('#speed').html(0, '$1');
+    	}
+    }
+    setInterval(autoResetSpeed, 650);
+    
     callbacks.counterUpdate = counterUpdate;
     callbacks.twitterUpdate = twitterUpdate;
+    callbacks.speedUpdate = speedUpdate;
     
 	function createWebSocket(host, callbacks) {
 		if (window.console) {
@@ -92,8 +147,10 @@
 	}
 	
 	var updateKeyword = function () {
-		sendMessage(document.getElementById("keywordField").value);
+		sendMessage("keywordChanged:"+document.getElementById("keywordField").value);
 	}
+	
+	var stopApp = function () { sendMessage("stop"); }
     </script>
     </div>
 }

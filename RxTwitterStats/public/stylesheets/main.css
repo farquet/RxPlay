@@ -40,8 +40,22 @@ h1 {
 #liveTweet {
 }
 
-#counter {
+#counter { 
 	font-style:bold;
+}
+
+#gaugeBox {
+	width:100px;
+	height:100px;
+}
+
+#stopButton {
+}
+
+#liveSpeed {
+	position:absolute;
+	bottom:20px;
+	right:0px;
 }
 
 #comet {

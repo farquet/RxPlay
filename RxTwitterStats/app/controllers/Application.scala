@@ -13,7 +13,7 @@ import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import java.util.Date
 import java.text._
 import java.io._
-import java.net.URLEncoder
+import java.net.{URI, URLDecoder, URLEncoder}
 
 import scala.io.Source
 import scala.concurrent.Future
@@ -26,6 +26,7 @@ import RxPlay._
 
 import org.apache.http.client.HttpClient
 import org.apache.http.impl.client.DefaultHttpClient
+import org.apache.http._
 import org.apache.http.client.methods.HttpGet
 import oauth.signpost.commonshttp.CommonsHttpOAuthConsumer
 import org.apache.commons.io.IOUtils
@@ -52,15 +53,15 @@ object Application extends Controller {
      val request = new HttpGet(req)
      consumer.sign(request) // signing the current request with the authentication set above
      
-     val client = new DefaultHttpClient()
-	 println("Opening new Twitter stream")
+     val client = new DefaultHttpClient
+	 println("Opening new Twitter stream.")
      val response = client.execute(request)
-     val status = response.getStatusLine().getStatusCode()
-     val inputStream = response.getEntity().getContent()
+     val status = response.getStatusLine.getStatusCode
+     val inputStream = response.getEntity.getContent
      
      (status, inputStream)
   }
-   
+  
   /**
    * old version using a future that will call himself
    */
@@ -110,26 +111,25 @@ object Application extends Controller {
          System.err.println("Error : " + e.getMessage())
        }
      }
-	 // TODO we could also return a Subscription. Is it usefull here ?
-    }
+    }.filter(_.length > 0) // deleting keep-alive data from Twitter
   }
   
   /**
    * Returns an Observable of JSON tweets as Strings for a given keyword
    */
-  def twitterFeedKeyword(keyword: String): Observable[String] = {
+  def twitterFeedKeyword(keyword: String): Option[Observable[String]] = {
     // Twitter streaming API : https://dev.twitter.com/docs/streaming-apis/parameters
     
     println("Setting keyword to : "+keyword)
     
-    val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+keyword+"&filter_level=none&stall_warnings=true"
+    val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(keyword,"UTF-8")+"&filter_level=none&stall_warnings=true"
     val (status, is) = twitterRequest(req)
     
     if (status != 200) {
       println("Bad status from Twitter : "+status)
-      Observable.from(List("streamChange"))
+      None
     } else {
-      observableFromStream(is)
+      Some(observableFromStream(is))
     }
   }
   
@@ -144,80 +144,98 @@ object Application extends Controller {
     }
   }
 
-// unused for the moment but this could be a good way to handle data
-class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer[Int] {
-  override def onNext(elem: Int): Unit = { println("Subscriber received : "+elem) }
-  override def onCompleted(): Unit = { () => println("completed !") }
-  override def onError(e: Throwable): Unit = { println("error :"+e.getMessage) }
-}
-  
-  /**
-   * This returns an Observable that we will put inbetween real Twitter feed, to force closing connection the sooner,
-   * This avoids to wait until next tweet to close the connection
-   */
-  def bridgeFeedObs = Observable.from(List("streamChange"))
-
   /**
    * Creates a WebSocket
    * 'in' is the consumer of data received from the client
-   * 'textObs' is the data sent to the client
+   * 'messages' is the data sent to the client
    */
   def socket = WebSocket.using[String] { request =>
   
   val submit = Subject[Observable[String]]()
   val messages = Subject[String]()
+  val tweets = (submit.switch).publish // switching to the most recent twitter feed
+  
+  // helper methods to push a command to the browser
+  def sendInt(command:String, data:Int): Unit = send(command, data.toString)
+  def send(command:String, data:String) = messages.onNext(command+"Update:"+data)
+  
+  // pushing tweet to the tweetbox in the browser
+  val tweetSub:Subscription = tweets.subscribe { el =>
+  	    try {
+  	      val text = (Json.parse(el) \ "text").toString
+  	      if (text.length > 2)
+  	    	  send("twitter", text.substring(1, text.length-1))
+        } catch {
+  	      case e: JsResultException => println("Unable to parse : "+el)
+  	    }
+  	 }
+  
+  // real-time tweet counter sent to browser
+  val ctrSub:Subscription = tweets.scan(0)((ctr, tweet) => ctr + 1).subscribe { c => sendInt("counter", c) }
+  
+  // sends the number of tweets per second to the client
+  val speedSub:Subscription = tweets.buffer(1 second).filter(_.length > 0).subscribe { el => sendInt("speed", el.length) }
+  
+  // sends top 3 mentions until here
+  val mentionSub:Subscription = tweets.scan(Map.empty[String,Int])((m, t) => {
+     try {
+      val mentions = (Json.parse(t) \ "entities" \ "user_mentions")
+      
+      mentions.as[List[JsValue]].foreach { user =>
+          val name = (user \ "screen_name").toString
+          m.update(name, m.getOrElse(name, 0) + 1)
+        }
+    } catch {
+      case e: JsResultException => {
+        println("Unable to parse : "+t)
+      }
+    }
+    m
+  }).subscribe { map =>
+    // TODO map.toList
+    val top3 = map.foldLeft(List[(String, Int)]()) { (res, user) => { (user :: res).sortBy(_._2).reverse.take(3) } }
+    top3.foreach(el => println(el._1+" : "+el._2))
+  }
+  
+  // cleaning the app
+  def clientClose = {
+    println("Closing all connections.")
+    
+    // stopping consumers
+    if (!tweetSub.isUnsubscribed) tweetSub.unsubscribe
+	if (!ctrSub.isUnsubscribed) ctrSub.unsubscribe
+	if (!mentionSub.isUnsubscribed) mentionSub.unsubscribe
+	
+	// stopping producers
+	submit.onNext(Observable.empty)
+	submit.onCompleted
+	messages.onCompleted
+  }
   
   val in = Iteratee.foreach[String](dataReceived => {
-    
-    if (dataReceived == Enumerator.eof) { // TODO doesn't work
-      println("Client has closed the stream")
-      messages.onCompleted
-    } else {
+     
       println(dataReceived)
       
       val (func, arg) = splitFuncArg(dataReceived)
       
-      func match {
-        case "ping" =>
-          println("Handling ping")
-          messages.onNext("twitterUpdate:\"pong !\"")
-        
+      func match {   
         case "stop" =>
           println("Handling stop")
-          val empty = Subject[String]
-          empty.onNext("twitterUpdate:\"Stop !\"")
-          empty.onCompleted
-          submit.onNext(empty)
+          submit.onNext(Observable.never) // to close last Twitter stream and wait for user action
+          send("twitter", "Enter a keyword to receive twitter updates.")
         
-        case "keywordChanged" if (arg.length >= 2) =>
+        case "keywordChanged" if (arg.length > 0) =>
           println("Handling keyword change")
-          submit.onNext(bridgeFeedObs) // adding a "streamChange" keyword to force switching stream
-          // TODO wait a little bit or is it bad ?
-          submit.onNext(twitterFeedKeyword(arg)) // adding the feed to the Subject of Observable
-          
+          twitterFeedKeyword(arg) match {
+            case Some(obs) => submit.onNext(obs) // adding the feed to the Subject of Observable
+            case None => send("twitter", "Error setting the Twitter feed...")
+          }
+        case _ =>
+          println("Unrecognized input <"+dataReceived+">")
       }
-    }
-  })
+    }).map(_ => clientClose) // closing connection when finished consuming data
   
-  // submit.switch allow changing data feed
-  val tweetFeed: Subscription = (submit.switch).subscribe(
-  	  // onNext
-  	  { el:String => 
-  	    if (!el.equals("streamChange")) {
-  	    val text = (Json.parse(el) \ "text").toString
-  	    messages.onNext("twitterUpdate:\""+text+"\"")
-  	    }},
-  	  
-  	  // onError
-      {e:Throwable => println("Error on datasource : "+e.getMessage) },
-      
-      // onComplete
-      {() =>
-        messages.onCompleted
-        println("Completed") })
-  
-  
-  // TODO unsubscription of tweetFeed ??
+  tweets.connect // to sync Observables subscribed to the same feed
   
   (in, messages)
 }
@@ -225,6 +243,13 @@ class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer
   def index = Action {
     Ok(views.html.index())
   }
+  
+// unused for the moment but this could be a good way to handle data instead of giving the three functions
+class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer[Int] {
+  override def onNext(elem: Int): Unit = { println("Subscriber received : "+elem) }
+  override def onCompleted(): Unit = { () => println("completed !") }
+  override def onError(e: Throwable): Unit = { println("error :"+e.getMessage) }
+}
   
   /*--------------------------------------*/
   /*| For Comet use instead of WebSocket |*/
@@ -234,8 +259,10 @@ class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer
   val obsCollection : Map[String, Observable[String]] = Map.empty
   
   def changeKeyword(keyword: String) = Action {
-    val jsonObs = twitterFeedKeyword(keyword)
+    val jsonObs = twitterFeedKeyword(keyword).getOrElse(Observable.empty)
+    
     val textObs = jsonObs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
+    
     
     // TODO will not work because obsCollection sent to CometObs has already copied references to old key/value pair
     obsCollection.update("parent.twitterUpdate", textObs)
@@ -245,7 +272,7 @@ class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer
   
   def rxTwitterStats = Action {
     val keyword = "NBA"
-    val jsonObs = twitterFeedKeyword(keyword)
+    val jsonObs = twitterFeedKeyword(keyword).getOrElse(Observable.empty)
     
     val textObs = jsonObs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
     
