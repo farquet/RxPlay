@@ -280,7 +280,6 @@ object Application extends Controller {
     
     val textObs = jsonObs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
     
-    
     // TODO will not work because obsCollection sent to CometObs has already copied references to old key/value pair
     obsCollection.update("parent.twitterUpdate", textObs)
     
