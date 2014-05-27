@@ -1,62 +1,149 @@
-body {
+html, body {
     font-family: Helvetica, Arial;
     font-weight: lighter;
     text-align: center;
-    color: #666;
+    color: #555555;
+    background-color:#80BDD1;
+    padding:0px;
+    margin:0px;
+    height:100%;
+    width:100%;
 }
-
-h1 {
-    color: #333;
-}
-
 #content {
-	width:800px;
-	margin-left:auto;
-	margin-right:auto;
+	position:absolute;
+	height:100%;
+    width:100%;
+	min-width:508px;
+    min-height:400px;
+}
+.clear {
+	clear:both;
+}
+a:link {
+	text-decoration: none;
+	color: #555555;
+}
+a:visited {
+	text-decoration: none;
+	color: #555555;
+}
+a:active {
+	text-decoration: none;
+	color: #555555;
+}
+a:hover {
+	text-decoration: underline;
+	color: #555555;
+}
+#keywordTitle {
+	float:left;
+	margin-top:10px;
+	margin-left:10px;
+	height:40px;
+	font-style:bold;
+	font-size:1.1em;
 }
 
+/* style of form elements */
+.input {
+    border: 0px;
+    background: #ffc;
+    pading: 3px;
+    height: 28px;
+    color: #555555;
+    font-size:1.2em;
+    font-style:bold;
+    text-align:center;
+}
+.button {
+    border: 0px;
+    background: #9cf;
+    height: 30px;
+    color: #555555;
+}
+
+/* START : search field */
+#searchBox {
+	position:absolute;
+	float:right;
+	top:10px;
+	right:10px;
+	height:40px;
+}
+#keywordField {
+	float:left;
+}
+#keywordButton {
+	margin-left:10px;
+	float:left;
+}
+#pauseButton {
+	margin-left:10px;
+	width:54px;
+	float:left;
+}
+#stopButton {
+	margin-left:10px;
+	width:54px;
+	float:left;
+}
+::-webkit-input-placeholder { /* WebKit browsers */
+    font-size:0.7em;
+    line-height:24px;
+}
+:-moz-placeholder { /* Mozilla Firefox 4 to 18 */
+    font-size:0.7em;
+    line-height:24px;
+}
+::-moz-placeholder { /* Mozilla Firefox 19+ */
+    font-size:0.7em;
+    line-height:24px;
+}
+:-ms-input-placeholder { /* Internet Explorer 10+ */
+    font-size:0.7em;
+    line-height:24px;
+}
+/* END : search field */
+
+/* START : live tweets */
 #liveTweetBox {
-	margin-left:auto;
-	margin-right:auto;
-	width:400px;
-	height:85px;
-	padding:10px;
-	font-size:0.8em;
+	position:absolute;
+	top:0;
+	bottom:0;
+	margin:auto;
+	width:100%;
+	height:60px;
+	padding:14x 0px 14px 0px;
+	overflow:hidden;
+	font-size:0.85em;
 	background-color: #f0f0f0;
-	border: 1px #d9d9d9 dotted;
-	-webkit-border-radius: 5px;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
 	-moz-box-shadow: 2px 3px 5px 1px #888888;
 	-webkit-box-shadow: 2px 3px 5px 1px #888888;
 	box-shadow: 2px 3px 5px 1px #888888;
 }
-
-#liveTitle {
-	text-decoration:underline;
-	font-style:italic;
-}
-
 #liveTweet {
+	margin-top:14px;
 }
+/* END : live tweets */
 
+/* START : counter */
 #counter { 
 	font-style:bold;
 }
+/* END : counter */
 
+
+/* START : speed */
 #gaugeBox {
-	width:100px;
-	height:100px;
+	width:200px;
+	height:150px;
 }
-
-#stopButton {
-}
-
 #liveSpeed {
 	position:absolute;
 	bottom:20px;
 	right:0px;
 }
+/* END : speed */
 
 #comet {
     display: none;

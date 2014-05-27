@@ -1,6 +1,6 @@
 import play.Project._
 
-name := "rxTwitterStats"
+name := "RxTwitterStats"
 
 version := "1.0"
 

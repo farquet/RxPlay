@@ -1,4 +1,14 @@
-This a very simple Comet demonstration pushing clock events from the server to the Web browser using a the forever-frame technique. It demonstrates:
+This is a demo using Play, RxScala and the WidgetManager.
+It will retrieve tweets in real-time corresponding to the keyword choosen by the user.
 
-- Creating a Comet connection.
-- Writing custom Enumerators.
+To be able to run it, you need :
+
+- play installed and runnable from the command line. [Instructions here](http://www.playframework.com/documentation/2.0/Installing)
+- to create a file passwords.conf in conf/ folder. It must contains your tokens generated on [Twitter dev page](https://dev.twitter.com/apps) following that format :
+
+    # Twitter access tokens and keys generated on https://dev.twitter.com/apps/
+    
+    twitter.accessToken="314556020-gjT0EUkAQ3jFRcLu0ooQ9e2eYFCDKY544BgvDBUS"
+    twitter.accessSecret="xxdc7FFSwddvXP1BGFxSlHcA6OKZkqxvNLgedaMu2WrSW"
+    twitter.consumerKey="jv8ZWJsb8X7DJKKirEGOCknuI"
+    twitter.consumerSecret="0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"

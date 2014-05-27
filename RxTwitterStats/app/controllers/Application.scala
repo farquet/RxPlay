@@ -3,12 +3,15 @@ package controllers
 import play.api._
 import play.api.mvc._
 
+import play.Configuration
+import play.Play
+  
 import play.api.libs.iteratee._
 import play.api.templates._
 import play.api.libs.json._
+import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import scala.concurrent.duration._
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import java.util.Date
 import java.text._
@@ -34,18 +37,19 @@ import org.apache.commons.io.IOUtils
 
 object Application extends Controller {
   
-  // tokens generated on https://dev.twitter.com/apps/
-  
-  val AccessToken = "314556020-gjT0EUkAQ3jFRcLu0ooQ9e2eYFCDKY544BgvDBUS"
-  val AccessSecret = "xxdc7FFSwddvXP1BGFxSlHcA6OKZkqxvNLgedaMu2WrSW"
-  val ConsumerKey = "jv8ZWJsb8X7DJKKirEGOCknuI"
-  val ConsumerSecret = "0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"
- 
   /**
    * For a specific Twitter url of the streaming API,
    * will return the status code sent by Twitter and the corresponding input stream
    */
   def twitterRequest(req: String): (Int, InputStream) = { // return HTTP status and inputStream
+    
+     // Retrieving secret tokens and keys in passwords.conf
+     val cfg = Play.application.configuration
+     val AccessToken = cfg.getString("twitter.accessToken")
+     val AccessSecret = cfg.getString("twitter.accessSecret")
+     val ConsumerKey = cfg.getString("twitter.consumerKey")
+     val ConsumerSecret = cfg.getString("twitter.consumerSecret")
+    
      // setting keys and tokens in the request
 	 val consumer = new CommonsHttpOAuthConsumer(ConsumerKey,ConsumerSecret)
 	 consumer.setTokenWithSecret(AccessToken, AccessSecret)
@@ -122,7 +126,7 @@ object Application extends Controller {
     
     println("Setting keyword to : "+keyword)
     
-    val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(keyword,"UTF-8")+"&filter_level=none&stall_warnings=true"
+    val req = "https://stream.twitter.com/1.1/statuses/filter.json?track="+URLEncoder.encode(keyword, "UTF-8")+"&filter_level=none&stall_warnings=true"
     val (status, is) = twitterRequest(req)
     
     if (status != 200) {
@@ -152,104 +156,117 @@ object Application extends Controller {
   def socket = WebSocket.using[String] { request =>
   
   val submit = Subject[Observable[String]]()
-  val messages = Subject[String]()
   val tweets = (submit.switch).publish // switching to the most recent twitter feed
   
-  // helper methods to push a command to the browser
-  def sendInt(command:String, data:Int): Unit = send(command, data.toString)
-  def send(command:String, data:String) = messages.onNext(command+"Update:"+data)
+  // data to send between twitter feed to know that we are changing keyword
+  def resetObs = Observable.from(List("RESET"))
   
-  // pushing tweet to the tweetbox in the browser
-  val tweetSub:Subscription = tweets.subscribe { el =>
-  	    try {
-  	      val text = (Json.parse(el) \ "text").toString
-  	      if (text.length > 2)
-  	    	  send("twitter", text.substring(1, text.length-1))
-        } catch {
-  	      case e: JsResultException => println("Unable to parse : "+el)
-  	    }
-  	 }
-  
-  // real-time tweet counter sent to browser
-  val ctrSub:Subscription = tweets.scan(0)((ctr, tweet) => ctr + 1).subscribe { c => sendInt("counter", c) }
-  
-  // sends the number of tweets per second to the client
-  val speedSub:Subscription = tweets.buffer(1 second).filter(_.length > 0).subscribe { el => sendInt("speed", el.length) }
-  
-  // sends top 3 mentions until here
-  val mentionSub:Subscription = tweets.scan(Map.empty[String,Int])((m, t) => {
-     try {
-      val mentions = (Json.parse(t) \ "entities" \ "user_mentions")
-      
-      mentions.as[List[JsValue]].foreach { user =>
-          val name = (user \ "screen_name").toString
-          m.update(name, m.getOrElse(name, 0) + 1)
-        }
-    } catch {
-      case e: JsResultException => {
-        println("Unable to parse : "+t)
-      }
+  def processClientData(func: String, arg:String, m:WidgetManager) = {
+    func match {   
+        case "stop" =>
+          submit.onNext(resetObs) // to notify subscribers that we stop
+          m.send("twitter", "Enter a keyword to receive twitter updates.")
+         
+        case "pause" =>
+          submit.onNext(Observable.empty) // to stop receiving tweets
+        
+        case "resumeKeyword" if (arg.length > 0) =>
+          twitterFeedKeyword(arg) match {
+            case Some(obs) => submit.onNext(obs) // adding the feed to the Subject of Observable
+            case None => m.send("twitter", "Error recovering the Twitter feed...")
+          }
+        
+        case "keywordChanged" if (arg.length > 0) =>
+          twitterFeedKeyword(arg) match {
+            case Some(obs) => {
+              submit.onNext(resetObs) // to notify subscribers that we change twitter stream
+              m.send("twitter", "Awaiting tweets for keyword : "+xml.Utility.escape(arg))
+              submit.onNext(obs) // adding the feed to the Subject of Observable
+            }
+            case None => m.send("twitter", "Error setting the Twitter feed...")
+          }
+        case _ => 
+          println("Unrecognized input <"+func+":"+arg+">")
     }
-    m
-  }).subscribe { map =>
-    // TODO map.toList
-    val top3 = map.foldLeft(List[(String, Int)]()) { (res, user) => { (user :: res).sortBy(_._2).reverse.take(3) } }
-    top3.foreach(el => println(el._1+" : "+el._2))
   }
   
   // cleaning the app
-  def clientClose = {
+  def onClientClose(m: WidgetManager) = {
     println("Closing all connections.")
     
     // stopping consumers
-    if (!tweetSub.isUnsubscribed) tweetSub.unsubscribe
-	if (!ctrSub.isUnsubscribed) ctrSub.unsubscribe
-	if (!mentionSub.isUnsubscribed) mentionSub.unsubscribe
+    m.unsubscribeAll
 	
 	// stopping producers
 	submit.onNext(Observable.empty)
 	submit.onCompleted
-	messages.onCompleted
+	
+	// closing manager
+	m.close
   }
   
-  val in = Iteratee.foreach[String](dataReceived => {
-     
-      println(dataReceived)
-      
-      val (func, arg) = splitFuncArg(dataReceived)
-      
-      func match {   
-        case "stop" =>
-          println("Handling stop")
-          submit.onNext(Observable.never) // to close last Twitter stream and wait for user action
-          send("twitter", "Enter a keyword to receive twitter updates.")
-        
-        case "keywordChanged" if (arg.length > 0) =>
-          println("Handling keyword change")
-          twitterFeedKeyword(arg) match {
-            case Some(obs) => submit.onNext(obs) // adding the feed to the Subject of Observable
-            case None => send("twitter", "Error setting the Twitter feed...")
+  val manager = new WidgetManager(processClientData, onClientClose)
+  
+  val ctrObs = tweets.scan(0)((ctr, tweet) => if (tweet == "RESET") 0 else ctr + 1).map(_.toString)
+  val speedObs = tweets.buffer(1 second).filter(_.length > 0).filter(_ != "RESET").map(_.length.toString)
+  val top3Obs = tweets.scan(Map.empty[String,Int])((m, t) => {
+    if (t == "RESET") {
+        Map.empty // cleaning the mentions ranking if we change feed
+     } else {
+       try {
+          val mentions = (Json.parse(t) \ "entities" \ "user_mentions")
+         
+          mentions.as[List[JsValue]].foreach { user =>
+            val name = (user \ "screen_name").toString
+            m.update(name, m.getOrElse(name, 0) + 1)
           }
-        case _ =>
-          println("Unrecognized input <"+dataReceived+">")
+        } catch {
+          case e: JsResultException => {
+            println("Unable to parse : "+t)
+          }
+        }
+        m // returning the updated map
       }
-    }).map(_ => clientClose) // closing connection when finished consuming data
+    }).map({ map =>
+    val top3 = map.toList.sortBy(-_._2).take(3)
+    top3.foreach(el => println(el._1+" : "+el._2))
+    top3.map(el => el._1+","+el._2).mkString(";")
+  })
+  
+  // sends tweet text to client extracted from json
+  manager.addObservable("tweets", tweets)
+  manager.subscribe("tweets", { jsonTweet:String =>
+    try {
+  	    if (jsonTweet != "RESET") {
+  	    val text = (Json.parse(jsonTweet) \ "text").toString
+  	    if (text.length > 2)
+  	      manager.send("twitter", text.substring(1, text.length-1))
+  	    }
+      } catch {
+  	    case e: JsResultException => println("Unable to parse : "+jsonTweet)
+  	  }
+  })
   
   tweets.connect // to sync Observables subscribed to the same feed
   
-  (in, messages)
+  // real-time tweet counter sent to browser
+  manager.addObservable("counter", ctrObs)  
+  manager.subscribePush("counter")
+  
+  // sends the number of tweets per second to the client
+  manager.addObservable("speed", speedObs)
+  manager.subscribePush("speed")
+  
+  // sends top 3 mentions until now
+  manager.addObservable("mentionsRank", top3Obs)
+  manager.subscribePush("mentionsRank")
+  
+  manager.getWebSocket
 }
   
   def index = Action {
     Ok(views.html.index())
   }
-  
-// unused for the moment but this could be a good way to handle data instead of giving the three functions
-class StreamObserver[Int](reader: BufferedReader) extends rx.lang.scala.Observer[Int] {
-  override def onNext(elem: Int): Unit = { println("Subscriber received : "+elem) }
-  override def onCompleted(): Unit = { () => println("completed !") }
-  override def onError(e: Throwable): Unit = { println("error :"+e.getMessage) }
-}
   
   /*--------------------------------------*/
   /*| For Comet use instead of WebSocket |*/

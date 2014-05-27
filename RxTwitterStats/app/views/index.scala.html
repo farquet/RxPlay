@@ -1,22 +1,38 @@
 @main {
-    <div id="content">
-    <h1>RxTwitterStats</h1>
+	<div id="content">
+	
+	<div id="keywordTitle"></div>
+    <div id="searchBox">
+	<input type="text" name="keywordField" placeholder="Choose a keyword..." id="keywordField" class="input" onKeyDown="Javascript: if (event.keyCode==13) updateKeyword();">
+	<input type="submit" id="keywordButton" value="Change Keyword" class="button" onclick="updateKeyword()">
+	<input type="submit" id="pauseButton" value="Pause" class="button" onclick="pauseResumeClick()">
+	<input type="submit" id="stopButton" value="Stop" class="button" onclick="stopApp()">
+	</div>
+	
+	<br class="clear" />
+	
+    <div id="liveTweetBox">
+    <p id="liveTweet">Enter a keyword to receive twitter updates.</p>
+    </div>
     
-    <input type="submit" id="stopButton" value="Stop" onclick="stopApp()">
+    <div id="counterBox">
     <br />
-    <div id="liveTweetBox"><p id="liveTitle">Live tweets</p>
-    <p id="liveTweet">Waiting for tweet...</p>
-    </div><br style="clear:both" /><br />
     <p>Number of live tweets : <span id="counter">0</span></p>
-    <div><br />
-	<input type="text" name="keywordField" id="keywordField" onKeyDown="Javascript: if (event.keyCode==13) updateKeyword();">
-	<input type="submit" value="Change Keyword" onclick="updateKeyword()">
 	<br />
+	</div>
+	
+	<div id="mentionsRank">
+	<p><span id="mention1Name"></span> <span id="mention1Val"></span></p>
+	<p><span id="mention2Name"></span> <span id="mention2Val"></span></p>
+	<p><span id="mention3Name"></span> <span id="mention3Val"></span></p>
+	</div>
+	
 	<div id="liveSpeed">
-	<canvas width="300px" height="100px" id="gaugeBox" style="width:150px;height:50px;"></canvas>
+	<canvas width="150px" height="100px" id="gaugeBox"></canvas>
 	<br />
 	<div><span id="speed">0</span> tweets/sec</div>
 	</div>
+	
 	</div>
 	
     <script type="text/javascript" charset="utf-8">
@@ -58,7 +74,6 @@
     }
     
     var lastSpeedUpdate = -1; // store last time the gauge was updated
-    
     var speedUpdate = function(speed) {
     	console.log("speed : <"+speed+">");
     	var gaugeVal = speed;
@@ -80,9 +95,29 @@
     }
     setInterval(autoResetSpeed, 650);
     
+    var mentionsRankUpdate = function(arg) {
+    	var maxRank = 3;
+    	var argSplit = arg.split(';');
+    	
+    	if (argSplit.length < maxRank) cleanMentions();
+    	
+        $.each(argSplit,function(num){
+        	  var mention = argSplit[num].split(',');
+        	  
+        	  if (mention.length >= 2 && num < maxRank) {
+        		  var name = mention[0].substring(1,mention[0].length-1);
+        		  if ($('#mention'+(num+1)+'Name').text().indexOf(name) < 0) {
+        		  	$('#mention'+(num+1)+'Name').html("<a href=\"http://www.twitter.com/"+name+"\" target=\"_blank\">@@"+name+ "</a> :");
+        		  }
+        		  $('#mention'+(num+1)+'Val').text(mention[1]+" mentions");
+        	  }
+        });
+    }
+    
     callbacks.counterUpdate = counterUpdate;
     callbacks.twitterUpdate = twitterUpdate;
     callbacks.speedUpdate = speedUpdate;
+    callbacks.mentionsRankUpdate = mentionsRankUpdate;
     
 	function createWebSocket(host, callbacks) {
 		if (window.console) {
@@ -96,9 +131,9 @@
 		
 		if (!window.WebSocket) {
 			if (window.console) {
-				console.log("This browser doesn't support websockets.")
+				console.log("This browser doesn't support websockets.");
 			}
-			alert('Votre navigateur ne supporte pas les WebSocket.');
+			alert("ERROR : Sorry, this application only works on browsers with WebSocket technology.");
 			return false;
 		} else {
 			socket = new WebSocket(host);
@@ -145,12 +180,60 @@
 			console.error("Socket undefined while trying to send.");
 		}
 	}
-	
-	var updateKeyword = function () {
-		sendMessage("keywordChanged:"+document.getElementById("keywordField").value);
+
+	var cleanMentions = function() {
+		for (var i=0; i < 3; i++) {
+			$('#mention'+(i+1)+'Name').text('');
+			$('#mention'+(i+1)+'Val').text('');
+		}
 	}
 	
-	var stopApp = function () { sendMessage("stop"); }
+	var currentKeyword = "";
+	var updateKeyword = function() {
+		var kw = $("#keywordField").val();
+		if (kw != currentKeyword){
+			state = "run";
+			sendMessage("keywordChanged:"+kw);
+			currentKeyword = kw;
+			$("#keywordTitle").text(kw);
+			$("#keywordTitle").append("<img src=\"@routes.Assets.at("images/loading.gif")\" height=\"10px\" style=\"margin-left:10px;\" />");
+		}
+	}
+	
+	var state = "run";
+	var pauseResumeClick = function() {
+		if (currentKeyword.length > 0) {
+			if (state == "run") {
+				pauseApp();
+			} else {
+				resumeApp();
+			}
+		}
+	}
+	
+	var pauseApp = function() {
+		$("#pauseButton").val('Resume');
+		$("#keywordTitle").text(currentKeyword);
+		state = "pause";
+		sendMessage("pause");
+	}
+	
+	var resumeApp = function() {
+		if (currentKeyword.length > 0) {
+			$("#pauseButton").val('Pause');
+			$("#keywordTitle").append("<img src=\"@routes.Assets.at("images/loading.gif")\" height=\"10px\" style=\"margin-left:10px;\" />");
+			state = "run";
+			sendMessage("resumeKeyword:"+currentKeyword);
+		}
+	}
+	
+	var stopApp = function() {
+		currentKeyword = "";
+		sendMessage("stop");
+		$('#keywordField').val('');
+		$('#keywordTitle').text('');
+		cleanMentions();
+	}
+	
     </script>
-    </div>
 }

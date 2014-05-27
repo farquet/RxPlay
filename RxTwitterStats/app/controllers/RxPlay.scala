@@ -26,7 +26,7 @@ object RxPlay {
       // enumerator input is tested with this predicate
       // once cancelled is set to true, the enumerator will stop producing data
       val cancellableEnum = enum through Enumeratee.breakE[T](_ => cancelled)
-
+      
       // applying iteratee on producer, passing data to the observable
       cancellableEnum (
         Iteratee.foreach(observer.onNext(_))
