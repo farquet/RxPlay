@@ -21,3 +21,6 @@ dist
 .classpath
 .scala_dependencies
 bin
+
+#OSX
+.DS_Store
