@@ -8,7 +8,7 @@ To be able to run it, you need :
 
     # Twitter access tokens and keys generated on https://dev.twitter.com/apps/
     
-    twitter.accessToken="314556020-gjT0EUkAQ3jFRcLu0ooQ9e2eYFCDKY544BgvDBUS"
-    twitter.accessSecret="xxdc7FFSwddvXP1BGFxSlHcA6OKZkqxvNLgedaMu2WrSW"
-    twitter.consumerKey="jv8ZWJsb8X7DJKKirEGOCknuI"
-    twitter.consumerSecret="0Dx3Ogo7x64bZkpLiILQSveUR9jPgf5cXWdx47eBXFGLv7Xy5V"
+    twitter.accessToken=""
+    twitter.accessSecret=""
+    twitter.consumerKey=""
+    twitter.consumerSecret=""
