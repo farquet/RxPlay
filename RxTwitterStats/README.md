@@ -3,7 +3,7 @@ It will retrieve tweets in real-time corresponding to the keyword choosen by the
 
 To be able to run it, you need :
 
-- play or sbt installed and runnable from the command line. [Play installation here](http://www.playframework.com/documentation/2.0/Installing), [Sbt installation here](http://www.scala-sbt.org/0.13.2/docs/Getting-Started/Setup.html)
+- [sbt](http://www.scala-sbt.org/0.13.2/docs/Getting-Started/Setup.html) or [play](http://www.playframework.com/documentation/2.0/Installing) installed and runnable from the command line.
 - to create a file passwords.conf in conf/ folder. It must contains your tokens generated on [Twitter dev page](https://dev.twitter.com/apps) following that format :
 
 ```

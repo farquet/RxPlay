@@ -83,7 +83,7 @@ class WidgetManager(processClientData: (String, String, WidgetManager) => Unit =
     /**
      * Returns directly the WebSocket that Play expects.
      */
-	def getWebSocket: (Iteratee[String, _], Enumerator[String]) = {
+	def webSocket: (Iteratee[String, _], Enumerator[String]) = {
 	  val in = Iteratee.foreach[String] { data =>
 	    val (func, arg) = splitFuncArg(data)
 	    processClientData(func, arg, this)

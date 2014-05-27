@@ -86,7 +86,7 @@ object Application extends Controller {
 	   def getTweet:Unit = {
 	     val f = Future[String] {
 	       val tweet = bufferedReader.readLine
-	       println(tweet.take(180)+" ...")
+	       //println(tweet.take(180)+" ...")
 	       tweet
 	     }
 	     f onComplete {
@@ -177,9 +177,9 @@ object Application extends Controller {
           }
         
         case "keywordChanged" if (arg.length > 0) =>
+          submit.onNext(resetObs) // to notify subscribers that we change twitter stream
           twitterFeedKeyword(arg) match {
             case Some(obs) => {
-              submit.onNext(resetObs) // to notify subscribers that we change twitter stream
               m.send("twitter", "Awaiting tweets for keyword : "+xml.Utility.escape(arg))
               submit.onNext(obs) // adding the feed to the Subject of Observable
             }
@@ -229,12 +229,11 @@ object Application extends Controller {
       }
     }).map({ map =>
     val top3 = map.toList.sortBy(-_._2).take(3)
-    top3.foreach(el => println(el._1+" : "+el._2))
     top3.map(el => el._1+","+el._2).mkString(";")
-  })
+  }).buffer(100 milliseconds).filter(_.length > 0).map(_.head)
   
-  // sends tweet text to client extracted from json
-  manager.addObservable("tweets", tweets)
+  // sends tweet text to client extracted from json  	  
+  manager.addObservable("tweets", tweets.buffer(100 milliseconds).filter(_.length > 0).map(_.head))
   manager.subscribe("tweets", { jsonTweet:String =>
     try {
   	    if (jsonTweet != "RESET") {
@@ -261,7 +260,7 @@ object Application extends Controller {
   manager.addObservable("mentionsRank", top3Obs)
   manager.subscribePush("mentionsRank")
   
-  manager.getWebSocket
+  manager.webSocket
 }
   
   def index = Action {
