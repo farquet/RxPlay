@@ -61,31 +61,73 @@
     </script>
 	
     <script type="text/javascript" charset="utf-8">
-    var socket;
-    var callbacks = {};
     
-    var counterUpdate = function(ctr) {
-    	$('#counter').html(ctr, '$1');
-    }
+    // formatting websocket URL
+    var pathArray = window.location.pathname.split( '/' );
+	pathArray[pathArray.length-1] = "socket";
+	var path = pathArray.join("/");
+	url= "ws://"+window.location.host+path;
+	
+	// creating WidgetManager
+    var widgetManager = new WidgetManager(url);
     
-    var twitterUpdate = function(liveTweet) {
-    	var safeVal = liveTweet.replace(/[\\"]/g, "\"");
-    	$('#liveTweet').html(safeVal, '<span>$1</span>');
-    }
-    
-    var lastSpeedUpdate = -1; // store last time the gauge was updated
-    var speedUpdate = function(speed) {
-    	console.log("speed : <"+speed+">");
-    	var gaugeVal = speed;
-    	if (gaugeVal <= 0) gaugeVal = 0;
-    	if (gaugeVal >= gauge.maxValue) gaugeVal = gauge.maxValue;
-    	gauge.set(1*gaugeVal);
-    	
-    	$('#speed').html(speed, '$1');
-    	
-    	lastSpeedUpdate = new Date().getTime();
-    }
- 	// reset the gauge if there has been no update after 1.2sec
+	
+	// ****** creating callbacks method to handle data received from server *****
+	
+	var lastSpeedUpdate = -1; // store last time the gauge was updated
+	
+	var callbacks = {
+	    counterUpdate: function(ctr) {
+	    	$('#counter').html(ctr, '$1');
+	    },
+	    
+	    twitterUpdate: function(liveTweet) {
+	    	var safeVal = liveTweet.replace(/[\\"]/g, "\"");
+	    	$('#liveTweet').html(safeVal, '<span>$1</span>');
+	    },
+	    
+	    speedUpdate: function(speed) {
+	    	console.log("speed : <"+speed+">");
+	    	var gaugeVal = speed;
+	    	if (gaugeVal <= 0) gaugeVal = 0;
+	    	if (gaugeVal >= gauge.maxValue) gaugeVal = gauge.maxValue;
+	    	gauge.set(1*gaugeVal);
+	    	
+	    	$('#speed').html(speed, '$1');
+	    	
+	    	lastSpeedUpdate = new Date().getTime();
+	    },
+	    
+	    mentionsRankUpdate: function(arg) {
+	    	var maxRank = 3;
+	    	var argSplit = arg.split(';');
+	    	
+	    	if (argSplit.length < maxRank) cleanMentions();
+	    	
+	        $.each(argSplit,function(num){
+	        	  var mention = argSplit[num].split(',');
+	        	  
+	        	  if (mention.length >= 2 && num < maxRank) {
+	        		  var name = mention[0].substring(1,mention[0].length-1);
+	        		  if ($('#mention'+(num+1)+'Name').text().indexOf(name) < 0) {
+	        		  	$('#mention'+(num+1)+'Name').html("<a href=\"http://www.twitter.com/"+name+"\" target=\"_blank\">@@"+name+ "</a> :");
+	        		  }
+	        		  $('#mention'+(num+1)+'Val').text(mention[1]+" mentions");
+	        	  }
+	        });
+	    }
+	    
+	}
+
+	// opening connection with the server
+	widgetManager.startWebSocket(callbacks);
+	
+	</script>
+	
+	<script type="text/javascript" charset="utf-8">
+	// ***** Other utility functions for updating the UI *****
+
+	// reset the gauge if there has been no update after 1.2sec
     function autoResetSpeed() {
     	var now = new Date().getTime();
     	if (lastSpeedUpdate != -1 && now - lastSpeedUpdate > 1200) {
@@ -95,92 +137,6 @@
     }
     setInterval(autoResetSpeed, 650);
     
-    var mentionsRankUpdate = function(arg) {
-    	var maxRank = 3;
-    	var argSplit = arg.split(';');
-    	
-    	if (argSplit.length < maxRank) cleanMentions();
-    	
-        $.each(argSplit,function(num){
-        	  var mention = argSplit[num].split(',');
-        	  
-        	  if (mention.length >= 2 && num < maxRank) {
-        		  var name = mention[0].substring(1,mention[0].length-1);
-        		  if ($('#mention'+(num+1)+'Name').text().indexOf(name) < 0) {
-        		  	$('#mention'+(num+1)+'Name').html("<a href=\"http://www.twitter.com/"+name+"\" target=\"_blank\">@@"+name+ "</a> :");
-        		  }
-        		  $('#mention'+(num+1)+'Val').text(mention[1]+" mentions");
-        	  }
-        });
-    }
-    
-    callbacks.counterUpdate = counterUpdate;
-    callbacks.twitterUpdate = twitterUpdate;
-    callbacks.speedUpdate = speedUpdate;
-    callbacks.mentionsRankUpdate = mentionsRankUpdate;
-    
-	function createWebSocket(host, callbacks) {
-		if (window.console) {
-			console.log("Connecting to "+host+" ...");
-			console.log(callbacks.length+" callbacks function set");
-		}
-		
-		if (window.MozWebSocket) { // for Firefox
-			window.WebSocket=window.MozWebSocket;
-		}
-		
-		if (!window.WebSocket) {
-			if (window.console) {
-				console.log("This browser doesn't support websockets.");
-			}
-			alert("ERROR : Sorry, this application only works on browsers with WebSocket technology.");
-			return false;
-		} else {
-			socket = new WebSocket(host);
-			
-			socket.onopen = function() { if (window.console) console.log("Socket opened."); }
-			socket.onclose = function() { if (window.console) console.log("Socket closed."); }
-			socket.onerror = function() { if (window.console) console.log("Socket error."); }
-			
-			// msg has form <function_name:argument> or <function_name>
-			socket.onmessage = function(msgEvent) {
-				var msg = msgEvent.data;
-				
-				console.log("msg = "+msg);
-				index = msg.indexOf(":");
-				if (index < 0) { // function has no argument
-					callbacks[msg]();
-				} else {
-					func = msg.split(":")[0];
-					arg = msg.substring(index+1);
-					
-					callbacks[func](arg);
-				}
-			}
-		}
-		return socket;
-	}
-	
-	var pathArray = window.location.pathname.split( '/' );
-	pathArray[pathArray.length-1] = "socket";
-	var path = pathArray.join("/");
-	socket=createWebSocket("ws://"+window.location.host+path, callbacks);
-	
-	console.log(socket);
-	
-	function sendMessage(msg) {
-		if(typeof msg=='object') {
-			msg = JSON.stringify(msg); // converting any data to string
-		}
-		
-		if(socket) {
-			if (window.console) console.log("Sending to server -> "+msg);
-			socket.send(msg);
-		} else {
-			console.error("Socket undefined while trying to send.");
-		}
-	}
-
 	var cleanMentions = function() {
 		for (var i=0; i < 3; i++) {
 			$('#mention'+(i+1)+'Name').text('');
@@ -193,7 +149,7 @@
 		var kw = $("#keywordField").val();
 		if (kw != currentKeyword){
 			state = "run";
-			sendMessage("keywordChanged:"+kw);
+			widgetManager.serverExec("keywordChanged", kw);
 			currentKeyword = kw;
 			$("#keywordTitle").text(kw);
 			$("#keywordTitle").append("<img src=\"@routes.Assets.at("images/loading.gif")\" height=\"10px\" style=\"margin-left:10px;\" />");
@@ -215,7 +171,7 @@
 		$("#pauseButton").val('Resume');
 		$("#keywordTitle").text(currentKeyword);
 		state = "pause";
-		sendMessage("pause");
+		widgetManager.serverExec("pause");
 	}
 	
 	var resumeApp = function() {
@@ -223,13 +179,13 @@
 			$("#pauseButton").val('Pause');
 			$("#keywordTitle").append("<img src=\"@routes.Assets.at("images/loading.gif")\" height=\"10px\" style=\"margin-left:10px;\" />");
 			state = "run";
-			sendMessage("resumeKeyword:"+currentKeyword);
+			widgetManager.serverExec("resumeKeyword", currentKeyword);
 		}
 	}
 	
 	var stopApp = function() {
 		currentKeyword = "";
-		sendMessage("stop");
+		widgetManager.serverExec("stop");
 		$('#keywordField').val('');
 		$('#keywordTitle').text('');
 		cleanMentions();

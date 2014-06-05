@@ -1,0 +1,60 @@
+@main {
+	<div id="content">
+	
+	<input type="button" value="Start" id="appButton" name="appButton" onClick="toggle()">
+	<div id="time"></div>
+	
+	</div>
+	
+    <script type="text/javascript" charset="utf-8">
+    
+    // formatting websocket URL
+    var pathArray = window.location.pathname.split( '/' );
+	pathArray[pathArray.length-1] = "socket";
+	var path = pathArray.join("/");
+	url= "ws://"+window.location.host+path;
+	
+	// creating WidgetManager
+    var widgetManager = new WidgetManager(url);
+    
+	
+	// ****** creating callback method to handle data received from server *****
+	
+	var callbacks = {
+	    timeUpdate: function(time) {
+	    	console.log("Received data");
+	    	$("#time").html(time);
+	    }
+	}
+
+	// opening connection with the server
+	widgetManager.startWebSocket(callbacks);
+	
+	</script>
+	
+	<script type="text/javascript" charset="utf-8">
+	// ***** Utility functions for updating the UI *****
+	
+	var run = false;
+	
+	function toggle() {
+		if (run) stopApp();
+		else startApp();
+	}
+	
+	function stopApp() {
+		run = false;
+		$("#appButton").val('Start');
+		$("#time").html("");
+		widgetManager.serverExec("stop");
+	}
+	
+	function startApp() {
+		run = true;
+		$("#appButton").val('Stop');
+		$("#time").html("");
+		widgetManager.serverExec("start");
+	}
+	
+    </script>
+}

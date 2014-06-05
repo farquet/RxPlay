@@ -2,31 +2,23 @@ package controllers
 
 import play.api._
 import play.api.mvc._
-
 import play.Configuration
 import play.Play
-  
 import play.api.libs.iteratee._
 import play.api.templates._
 import play.api.libs.json._
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
 import scala.concurrent.duration._
-
 import java.util.Date
 import java.text._
 import java.io._
 import java.net.{URI, URLDecoder, URLEncoder}
-
 import scala.io.Source
 import scala.concurrent.Future
 import scala.util.{Success, Failure}
 import scala.collection.mutable.Map
 import rx.lang.scala._
 import rx.lang.scala.subjects._
-
-import RxPlay._
-
 import org.apache.http.client.HttpClient
 import org.apache.http.impl.client.DefaultHttpClient
 import org.apache.http._
@@ -34,6 +26,8 @@ import org.apache.http.client.methods.HttpGet
 import oauth.signpost.commonshttp.CommonsHttpOAuthConsumer
 import org.apache.commons.io.IOUtils
 
+import models.RxPlay._
+import models.WidgetManager
 
 object Application extends Controller {
   
@@ -67,7 +61,7 @@ object Application extends Controller {
   }
   
   /**
-   * old version using a future that will call himself
+   * Converts an inputStream to an Observable of Strings
    */
   def observableFromStream(is: InputStream): Observable[String] = {
     
@@ -136,17 +130,6 @@ object Application extends Controller {
       Some(observableFromStream(is))
     }
   }
-  
-  private def splitFuncArg(msg: String): (String, String) = { // cut string at first : occurence
-    val index = msg.indexOf(":")
-    val func = msg.split(":").head
-    
-    if (index < 0) { // client sent <func> to the server with no arg
-      (func, "")
-    } else {
-      (func, msg.substring(index+1))
-    }
-  }
 
   /**
    * Creates a WebSocket
@@ -162,7 +145,7 @@ object Application extends Controller {
   def resetObs = Observable.from(List("RESET"))
   
   def processClientData(func: String, arg:String, m:WidgetManager) = {
-    func match {   
+    func match {
         case "stop" =>
           submit.onNext(resetObs) // to notify subscribers that we stop
           m.send("twitter", "Enter a keyword to receive twitter updates.")
@@ -261,42 +244,10 @@ object Application extends Controller {
   manager.subscribePush("mentionsRank")
   
   manager.webSocket
-}
+  }
   
   def index = Action {
     Ok(views.html.index())
   }
-  
-  /*--------------------------------------*/
-  /*| For Comet use instead of WebSocket |*/
-  /*--------------------------------------*/
-  
-  // mutable map between the name of the javascript function to call on the client side and the corresponding feed of data as an Observable
-  val obsCollection : Map[String, Observable[String]] = Map.empty
-  
-  def changeKeyword(keyword: String) = Action {
-    val jsonObs = twitterFeedKeyword(keyword).getOrElse(Observable.empty)
-    
-    val textObs = jsonObs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
-    
-    // TODO will not work because obsCollection sent to CometObs has already copied references to old key/value pair
-    obsCollection.update("parent.twitterUpdate", textObs)
-    
-    Ok("Ok")
-  }
-  
-  def rxTwitterStats = Action {
-    val keyword = "NBA"
-    val jsonObs = twitterFeedKeyword(keyword).getOrElse(Observable.empty)
-    
-    val textObs = jsonObs.map(data => (Json.parse(data.mkString) \ "text").toString).filter(_.length > 0)
-    
-    obsCollection.+=(("parent.twitterUpdate", textObs))
-    
-    Ok.chunked(CometObs(obsCollection))
-  }
-  
-  def cometIndex = Action {
-    Ok(views.html.cometIndex())
-  }
+
 }
