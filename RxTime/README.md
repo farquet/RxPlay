@@ -1,5 +1,6 @@
 The simplest possible app using RxPlay conversions and WidgetManager !
-When you click the button, the server will reply with the current server time.
+When you click the button, the server will reply with the current server time and send it again every second.
+This uses WebSocket to maintain a connection between the server and the client.
 
 To be able to run it, you need :
 
