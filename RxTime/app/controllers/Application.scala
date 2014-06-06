@@ -12,6 +12,8 @@ import rx.lang.scala._
 import models.RxPlay._
 import models.WidgetManager
 
+import play.api.libs.iteratee._
+
 object Application extends Controller {
 
   /**

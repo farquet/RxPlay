@@ -44,7 +44,7 @@ object RxPlay {
    * Observable to Enumerator
    */
   implicit def observable2Enumerator[T](obs: Observable[T]): Enumerator[T] = {
-    // unicast create a channel where you can push data into like an enumerator
+    // unicast create a channel where you can push data and returns an Enumerator
     Concurrent.unicast { channel =>
       val subscription = obs.subscribe(new ChannelObserver(channel))
       val onComplete = { () => subscription.unsubscribe }
