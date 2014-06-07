@@ -1,5 +1,7 @@
-RxPlay
-======
+The full project report can be found in PDF [here](http://francois.farquet.com/Observables_for_Play.pdf).
+
+RxPlay : Observables for Play !
+===============================
 
 We demonstrate here how we can efficiently use [RxScala](http://rxscala.github.io) to write reactive apps in [Play framework](http://www.playframework.com). This comes from the observation that Iteratees from Play may be harder to work with than Observables from Rx.
 
