@@ -1,4 +1,4 @@
-The full project report can be found in PDF [here](http://francois.farquet.com/Observables_for_Play.pdf).
+Download the full project report in [PDF](http://francois.farquet.com/Observables_for_Play.pdf).
 
 RxPlay : Observables for Play !
 ===============================
