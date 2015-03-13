@@ -2,7 +2,7 @@ This is a demo using Play, RxScala and the WidgetManager.
 It will retrieve tweets in real-time corresponding to the keyword choosen by the user.
 
 Have a look at the demo video :
-[![RxTwitterStats demo](http://img.youtube.com/vi/G70KP-A3AT8/maxresdefault.jpg)](http://www.youtube.com/watch?v=G70KP-A3AT8)
+[![RxTwitterStats demo](http://img.youtube.com/vi/G70KP-A3AT8/1.jpg)](http://www.youtube.com/watch?v=G70KP-A3AT8)
 
 To be able to run it, you need :
 
