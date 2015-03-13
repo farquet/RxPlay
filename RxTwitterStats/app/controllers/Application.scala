@@ -67,15 +67,8 @@ object Application extends Controller {
     
     val bufferedReader = new BufferedReader(new InputStreamReader(is, "UTF-8"))
     
-    def closeReader: Unit = {
-      println("App is closing Twitter stream.")
-      
-      if (bufferedReader.ready)
-    	  bufferedReader.close
-    }
-    
     Observable { sub: Subscriber[String] =>
-	  
+	 
 	 try {
 	   def getTweet:Unit = {
 	     val f = Future[String] {
@@ -91,13 +84,13 @@ object Application extends Controller {
 	           getTweet // fetching the next value
 	         } else {
 	           println("Unsubscribed from Twitter stream.")
-	           closeReader
+	           bufferedReader.close
 	         }
 	       }
 	       case Failure(e) => {
 	         println("Error with Twitter stream : "+e.getMessage())
 	         sub.onError(e) // propagating the error
-	         closeReader
+	         bufferedReader.close
 	       }
 	     }
 	   }
@@ -106,10 +99,11 @@ object Application extends Controller {
 	 } catch {
        case e : Throwable => {
          sub.onError(e) // passing the error to the Observable
+         bufferedReader.close
          System.err.println("Error : " + e.getMessage())
        }
      }
-    }.filter(_.length > 0) // deleting keep-alive data from Twitter
+    }.filter(_.length > 0) // deleting keep-alive messages from Twitter
   }
   
   /**
@@ -161,6 +155,10 @@ object Application extends Controller {
         
         case "keywordChanged" if (arg.length > 0) =>
           submit.onNext(resetObs) // to notify subscribers that we change twitter stream
+          
+          // waiting to avoid starting a new feed too early and get banned by Twitter (status 420)
+          Thread.sleep(1000)
+          
           twitterFeedKeyword(arg) match {
             case Some(obs) => {
               m.send("twitter", "Awaiting tweets for keyword : "+xml.Utility.escape(arg))
@@ -168,6 +166,7 @@ object Application extends Controller {
             }
             case None => m.send("twitter", "Error setting the Twitter feed...")
           }
+          
         case _ => 
           println("Unrecognized input <"+func+":"+arg+">")
     }
@@ -188,10 +187,17 @@ object Application extends Controller {
 	m.close
   }
   
+  // creating WidgetManager
   val manager = new WidgetManager(processClientData, onClientClose)
   
+  /*
+   * Creating all Observables
+   */
+  
   val ctrObs = tweets.scan(0)((ctr, tweet) => if (tweet == "RESET") 0 else ctr + 1).map(_.toString)
+  
   val speedObs = tweets.buffer(1 second).filter(_.length > 0).filter(_ != "RESET").map(_.length.toString)
+  
   val top3Obs = tweets.scan(Map.empty[String,Int])((m, t) => {
     if (t == "RESET") {
         Map.empty // cleaning the mentions ranking if we change feed
@@ -214,6 +220,10 @@ object Application extends Controller {
     val top3 = map.toList.sortBy(-_._2).take(3)
     top3.map(el => el._1+","+el._2).mkString(";")
   }).buffer(100 milliseconds).filter(_.length > 0).map(_.head)
+  
+  /* 
+   * Adding Observables to WidgetManager and subscribing to them
+   */
   
   // sends tweet text to client extracted from json  	  
   manager.addObservable("tweets", tweets.buffer(100 milliseconds).filter(_.length > 0).map(_.head))

@@ -12,7 +12,7 @@
     var pathArray = window.location.pathname.split( '/' );
 	pathArray[pathArray.length-1] = "socket";
 	var path = pathArray.join("/");
-	url= "ws://"+window.location.host+path;
+	url="ws://"+window.location.host+path;
 	
 	// creating WidgetManager
     var widgetManager = new WidgetManager(url);
