@@ -14,7 +14,7 @@ Then, we see that Iteratees and Enumerators are deeply integrated with the Play 
 * __RxTime__ : the simplest possible app that could serve as a template project. This is a simple web page with a single button. When you click on it, this creates an Observable on the server that will produce the time every second. You can stop the clock (i. e. unsubscribe from the Observable) and start it again (new subscription).
 
 * __RxTwitterStats__ : this is a complex app illustrating the power of RxPlay combined with WidgetManager (several Observables, chaining them, buffering, etc). This will show real-time tweets for a specific keyword. Top 3 mentionned users and number of tweets per second are displayed on screen. See Readme from the project directory for details and configuration (to add your Twitter tokens) or check out this live demo on Youtube :
-[![RxTwitterStats demo](http://img.youtube.com/vi/G70KP-A3AT8/maxresdefault.jpg)](http://www.youtube.com/watch?v=G70KP-A3AT8)
+[![RxTwitterStats demo](http://img.youtube.com/vi/G70KP-A3AT8/1.jpg)](http://www.youtube.com/watch?v=G70KP-A3AT8)
 
 ### the necessary files
 
